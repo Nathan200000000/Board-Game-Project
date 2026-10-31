@@ -1,0 +1,12 @@
+{
+  "name": "cpp-board-game",
+  "private": true,
+  "description": "Battle for Nexus — C++ board game, built to WebAssembly for the browser",
+  "scripts": {
+    "build": "bash web/vercel-build.sh"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0"
+  }
+}

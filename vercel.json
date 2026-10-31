@@ -1,18 +1,31 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "",
+  "buildCommand": "npm run build",
   "outputDirectory": "web/public",
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
-        { "key": "Cross-Origin-Embedder-Policy", "value": "require-corp" }
+        {
+          "key": "Cross-Origin-Opener-Policy",
+          "value": "same-origin"
+        },
+        {
+          "key": "Cross-Origin-Embedder-Policy",
+          "value": "require-corp"
+        }
       ]
     },
     {
       "source": "/(.*).wasm",
-      "headers": [{ "key": "Content-Type", "value": "application/wasm" }]
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/wasm"
+        }
+      ]
     }
-  ]
+  ],
+  "installCommand": "npm install",
+  "framework": null
 }

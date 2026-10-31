@@ -32,12 +32,12 @@ g++ -std=c++17 -Wall -o game main.cpp Game.cpp Player.cpp
 
 ## Browser version
 
-`web/build.sh` compiles the unchanged C++ sources to `web/public/game.wasm` with the [WASI SDK](https://github.com/WebAssembly/wasi-sdk). The page (`web/public/index.html`) shows the game in an [xterm.js](https://xtermjs.org/) terminal, and `web/public/worker.js` runs it in a Web Worker with a small WASI runtime so `std::cin` can wait for your input. Saved games are stored in the browser's localStorage.
+`web/vercel-build.sh` (run by Vercel) installs xterm.js and calls `web/build.sh`, which compiles the unchanged C++ sources to `web/public/game.wasm` with the [WASI SDK](https://github.com/WebAssembly/wasi-sdk). The page (`web/public/index.html`) shows the game in an [xterm.js](https://xtermjs.org/) terminal, and `web/public/worker.js` runs it in a Web Worker with a small WASI runtime so `std::cin` can wait for your input. Saved games are stored in the browser's localStorage.
 
-To rebuild after changing the C++ code:
+To build the web version locally (needs Node and curl; downloads the WASI SDK if `WASI_SDK` is not set):
 
 ```bash
-WASI_SDK=/path/to/wasi-sdk web/build.sh
+npm install && npm run build
 ```
 
-`vercel.json` serves `web/public` as a static site and sets the cross-origin isolation headers the worker needs.
+Every push is built by Vercel, which serves `web/public` as a static site and sets the cross-origin isolation headers the worker needs.
