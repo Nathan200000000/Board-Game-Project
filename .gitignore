@@ -1,0 +1,8 @@
+# Build outputs (native)
+*.o
+*.exe
+/game
+/a.out
+# Runtime save file
+savegame.txt
+.vercel

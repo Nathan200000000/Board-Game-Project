@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Battle for Nexus — C++ Board Game</title>
+<meta name="description" content="A turn-based C++ strategy board game, compiled to WebAssembly and playable in your browser.">
+<link rel="stylesheet" href="vendor/xterm.css">
+<style>
+  :root { --bg:#070a14; --panel:#0e1324; --line:#1f2742; --text:#d7def5; --muted:#7c88ad; --accent:#7aa2ff; --gold:#f5c66b; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--text);
+    font:15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { display:flex; flex-direction:column; min-height:100vh;
+    background: radial-gradient(1200px 600px at 80% -10%, #1a2350 0%, transparent 60%), var(--bg); }
+  header { padding:20px 24px 12px; display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; max-width:1100px; width:100%; margin:0 auto; }
+  h1 { margin:0; font-size:22px; letter-spacing:.02em; }
+  h1 span { color:var(--gold); }
+  header p { margin:0; color:var(--muted); font-size:14px; }
+  header a { color:var(--accent); text-decoration:none; margin-left:auto; font-size:14px; }
+  main { flex:1; display:flex; flex-direction:column; max-width:1100px; width:100%; margin:0 auto; padding:0 24px 24px; min-height:0; }
+  .term-wrap { flex:1; min-height:420px; background:#05070f; border:1px solid var(--line); border-radius:12px 12px 0 0; padding:10px; overflow:hidden; }
+  #term { height:100%; }
+  form { display:flex; gap:8px; background:var(--panel); border:1px solid var(--line); border-top:none; border-radius:0 0 12px 12px; padding:10px; }
+  #prompt-ind { align-self:center; color:var(--gold); font-family:ui-monospace, Menlo, Consolas, monospace; }
+  input { flex:1; min-width:0; background:#05070f; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:10px 12px;
+    font:15px ui-monospace, Menlo, Consolas, monospace; outline:none; }
+  input:focus { border-color:var(--accent); }
+  input:disabled { opacity:.5; }
+  button { background:var(--accent); color:#0a0f22; border:0; border-radius:8px; padding:0 16px; font-weight:600; cursor:pointer; }
+  button.secondary { background:transparent; color:var(--muted); border:1px solid var(--line); }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+  .chips button { background:var(--panel); color:var(--text); border:1px solid var(--line); padding:6px 10px; font-weight:500; font-size:13px; font-family:ui-monospace, Menlo, monospace; }
+  .chips button:hover { border-color:var(--accent); }
+  .note { color:var(--muted); font-size:13px; margin-top:10px; }
+  #warn { display:none; background:#3a1d1d; border:1px solid #6b2a2a; color:#ffd5d5; padding:12px 14px; border-radius:10px; margin-bottom:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🚀 Battle for <span>Nexus</span></h1>
+  <p>C++ board game · compiled to WebAssembly · runs entirely in your browser</p>
+  <a href="https://github.com/Nathan200000000/Cpp-Board-Game" target="_blank" rel="noopener">Source on GitHub →</a>
+</header>
+<main>
+  <div id="warn"></div>
+  <div class="term-wrap"><div id="term"></div></div>
+  <form id="f" autocomplete="off">
+    <span id="prompt-ind">&gt;</span>
+    <input id="in" placeholder="Loading…" disabled autocapitalize="off" spellcheck="false">
+    <button type="submit">Enter</button>
+    <button type="button" class="secondary" id="restart">Restart</button>
+  </form>
+  <div class="chips" id="chips">
+    <button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button>
+    <button data-v="4">4</button><button data-v="5">5</button><button data-v="6">6</button>
+    <button data-v="up">up</button><button data-v="down">down</button>
+    <button data-v="left">left</button><button data-v="right">right</button>
+    <button data-v="up-left">up-left</button><button data-v="up-right">up-right</button>
+    <button data-v="down-left">down-left</button><button data-v="down-right">down-right</button>
+  </div>
+  <p class="note">Type your answer to each prompt and press Enter (or tap a quick button). Saved games are kept in this browser.</p>
+</main>
+<script src="vendor/xterm.js"></script>
+<script src="vendor/addon-fit.js"></script>
+<script>
+(() => {
+  const term = new Terminal({
+    convertEol: true, disableStdin: true, cursorBlink: false, fontSize: 14, scrollback: 5000,
+    fontFamily: 'ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace',
+    theme: { background: '#05070f', foreground: '#d7def5', cursor: '#05070f' },
+  });
+  const fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
+  term.open(document.getElementById('term'));
+  const refit = () => { try { fit.fit(); } catch {} };
+  refit(); addEventListener('resize', refit);
+
+  const input = document.getElementById('in');
+  const form = document.getElementById('f');
+  const warn = document.getElementById('warn');
+  const enc = new TextEncoder();
+  const SAVE_KEY = 'nexus-files';
+
+  if (!self.crossOriginIsolated) {
+    warn.style.display = 'block';
+    warn.textContent = 'This page needs cross-origin isolation (SharedArrayBuffer) to run the game. Please open it over HTTPS from the deployed site.';
+    return;
+  }
+
+  let worker, sab, ctrl, data, decoder, waiting = false;
+
+  function loadFiles() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
+      const out = {};
+      for (const k in raw) out[k] = enc.encode(raw[k]);
+      return out;
+    } catch { return {}; }
+  }
+  function saveFile(path, bytes) {
+    try {
+      const raw = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
+      raw[path] = new TextDecoder().decode(bytes);
+      localStorage.setItem(SAVE_KEY, JSON.stringify(raw));
+    } catch {}
+  }
+
+  function setWaiting(on) {
+    waiting = on;
+    input.disabled = !on;
+    input.placeholder = on ? 'Type here and press Enter…' : 'Running…';
+    if (on) input.focus({ preventScroll: true });
+  }
+
+  function start() {
+    if (worker) worker.terminate();
+    term.reset();
+    decoder = new TextDecoder();
+    sab = new SharedArrayBuffer(8 + 4096);
+    ctrl = new Int32Array(sab, 0, 2);
+    data = new Uint8Array(sab, 8);
+    setWaiting(false);
+    worker = new Worker('worker.js');
+    worker.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === 'out') term.write(decoder.decode(m.data, { stream: true }));
+      else if (m.type === 'input') setWaiting(true);
+      else if (m.type === 'file') saveFile(m.path, m.data);
+      else if (m.type === 'exit') {
+        setWaiting(false);
+        input.placeholder = 'Game ended — press Restart to play again';
+        term.write('\r\n\x1b[33m— Game ended. Press Restart to play again. —\x1b[0m\r\n');
+      }
+    };
+    worker.postMessage({ sab, initialFiles: loadFiles() });
+  }
+
+  function send(text) {
+    if (!waiting) return;
+    term.write(text + '\r\n');
+    const bytes = enc.encode(text + '\n').slice(0, data.length);
+    data.set(bytes);
+    Atomics.store(ctrl, 1, bytes.length);
+    Atomics.store(ctrl, 0, 1);
+    Atomics.notify(ctrl, 0);
+    setWaiting(false);
+  }
+
+  form.addEventListener('submit', (e) => { e.preventDefault(); const v = input.value; input.value = ''; send(v); });
+  document.getElementById('chips').addEventListener('click', (e) => { const v = e.target.dataset && e.target.dataset.v; if (v) send(v); });
+  document.getElementById('restart').addEventListener('click', start);
+  start();
+})();
+</script>
+</body>
+</html>
